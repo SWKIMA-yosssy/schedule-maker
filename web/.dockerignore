@@ -1,0 +1,7 @@
+# .dockerignoreファイルの例
+.git
+.env
+.env.local
+node_modules
+*.log
+Thumbs.db
