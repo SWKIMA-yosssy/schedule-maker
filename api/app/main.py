@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from fastapi import FastAPI, Depends
 
+from app.routers import task
 app = FastAPI()
+
+app.include_router(task.router)
 
 # これらはテストコードです
 
