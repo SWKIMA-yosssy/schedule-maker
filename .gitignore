@@ -34,3 +34,29 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# FastAPI (venvなど)
+.venv/
+env/
+venv/
+
+# Docker
+*.pid
+*.log
+*.sock
+*.pid.lock
+
+# Postgres (永続化ボリュームを誤ってcommitしないため)
+db_data/
+
+# editor
+.idea/
+.vscode/
