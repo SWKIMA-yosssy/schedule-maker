@@ -1,6 +1,6 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "tailwindcss/preflight";
+@import "tailwindcss/utilities";
 
 :root {
   @apply bg-gray-50;
@@ -52,3 +52,9 @@ input {
   @apply bg-violet-500 border border-violet-600 ;
   
 }
+
+.fc {
+  margin:0 2rem;
+}
+
+
