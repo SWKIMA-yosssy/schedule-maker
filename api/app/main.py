@@ -3,11 +3,26 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from .db import get_db
 from fastapi import FastAPI, Depends
-
+from fastapi.middleware.cors import CORSMiddleware
 from app.routers import task
 app = FastAPI()
 
 app.include_router(task.router)
+
+origins = [
+    "http://localhost.tiangolo.com",
+    "https://localhost.tiangolo.com",
+    "http://localhost",
+    "http://localhost:8080",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # これらはテストコードです
 
