@@ -32,3 +32,34 @@ async def get_tasks_by_date(
     )
 
     return result.scalars().all()
+
+#日付からその月の初日と次の月の初日を返す
+def get_month_range(year:int,month:int):
+    #月の初日
+    start_of_month=datetime(year,month,1)
+    #次の月の初日
+    if month == 12:#12月の場合は年を繰り上げ
+        next_month = datetime(year + 1, 1, 1)
+    else:#それ以外は月を繰り上げ
+        next_month = datetime(year, month + 1, 1)
+    
+    return start_of_month, next_month
+
+
+
+async def get_tasks_by_month(
+        db: AsyncSession, year:int,month:int) -> list[task_model.Task]:
+    start_of_month,start_of_next_month=get_month_range(year,month)
+    
+    result = await db.execute(
+        select(
+            task_model.Task
+        )
+        .options(selectinload(task_model.Task.done))
+        .where(
+            task_model.Task.start_time >= start_of_month,
+            task_model.Task.start_time < start_of_next_month
+        )
+    )
+
+    return result.scalars().all()
