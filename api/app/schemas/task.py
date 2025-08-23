@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pydantic import BaseModel, Field, validator
-from datetime import datetime
+from datetime import datetime,time
 
 
 class TaskBase(BaseModel):

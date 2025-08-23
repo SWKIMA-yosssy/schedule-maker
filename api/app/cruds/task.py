@@ -26,7 +26,7 @@ async def get_task(db: AsyncSession, task_id: int) -> Optional[task_model.Task]:
     return task[0] if task is not None else None  # 要素が一つであってもtupleで返却されるので１つ目の要素を取り出す
 
 #完了フラグも一緒に取得 task_id,is_task,start_time,required_time,user_id,title,done
-async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,int,datetime, int,int,str,bool]]:
+async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,bool,datetime, int,int,str,bool]]:
     result: Result = await (
         db.execute(
             select(
@@ -44,7 +44,7 @@ async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,int,datetime, 
 
 #やっていないかつ開始時点を持たないタスクを習得
 
-async def get_tasks_nodone_istask(db: AsyncSession) -> List[Tuple[int,int,datetime, int,int,str,bool]]:
+async def get_tasks_nodone_istask(db: AsyncSession) -> List[Tuple[int,bool,datetime, int,int,str,bool]]:
     result: Result = await (
         db.execute(
             select(
@@ -58,12 +58,14 @@ async def get_tasks_nodone_istask(db: AsyncSession) -> List[Tuple[int,int,dateti
             ).outerjoin(task_model.Done)
             .where(
                 task_model.Done.task_id.is_(None),
-                task_model.Task.is_task==1,
+                task_model.Task.is_task.is_(True),
             )
         )
     )
     return result.all()
     
+#自分でdone,is_task値を選べる
+
 
 
 async def get_tasks_by_date(
