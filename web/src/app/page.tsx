@@ -5,7 +5,7 @@ import interactionPlugin from '@fullcalendar/interaction'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { CheckIcon, ExclamationTriangleIcon } from '@heroicons/react/20/solid'
+import { ExclamationTriangleIcon } from '@heroicons/react/20/solid'
 import { EventSourceInput } from '@fullcalendar/core/index.js'
 import { useRef } from "react"
 import { CalendarApi } from '@fullcalendar/core'
@@ -19,23 +19,31 @@ interface Event {
 }
 
 export default function Home() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
   const [allEvents, setAllEvents] = useState<Event[]>([])
-  const [showModal, setShowModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [idToDelete, setIdToDelete] = useState<number | null>(null)
-  const [newEvent, setNewEvent] = useState<Event>({
+  const [newEvent, setNewEvent] = useState({
     title: '',
-    start: '',
-    allDay: false,
-    id: 0
-  })
+    start_time: '',       // ← start → start_time に
+    required_time: 0,     // ← 所要時間を分で
+    user_id: 1,           // ← とりあえず固定値でOK
+    is_task: true         // ← タスクか予定かの判定
+  });
   const calendarRef = useRef<any>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isAddModalOpen_schedule, setIsAddModalOpen_schedule] = useState(false)
   const [isAddModalOpen_task, setIsAddModalOpen_task] = useState(false)
   const [isTaskManageModalOpen, setIsTaskManageModalOpen] = useState(false)
   const [tasks, setTasks] = useState<{ id: number; title: string; date: string; time: string; hours: number }[]>([])
+  const [durationHour, setDurationHour] = useState(0);
+  const [durationMin, setDurationMin] = useState(0);
 
+  const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+  const updateRequiredMinutes = (h: number, m: number) => {
+    const total = Math.max(0, h * 60 + m);
+    setNewEvent(prev => ({ ...prev, required_time: total }));
+  };
 
 
 
@@ -56,36 +64,82 @@ export default function Home() {
     setIdToDelete(null)
   }
 
-  function handleCloseModal() {
-    setShowModal(false)
-    setNewEvent({
-      title: '',
-      start: '',
-      allDay: false,
-      id: 0
-    })
-    setShowDeleteModal(false)
-    setIdToDelete(null)
+
+  const handleAddTask = async () => {
+
+  if (!newEvent.title || !newEvent.start_time || !newEvent.required_time) {
+    alert("すべての項目を入力してください");
+    return;
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setNewEvent({
-      ...newEvent,
-      title: e.target.value
-    })
-  }
+  try {
+    const res = await fetch(`${API_BASE}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...newEvent, is_task: true, user_id: 1 }),
+    });
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setAllEvents([...allEvents, newEvent])
-    setShowModal(false)
-    setNewEvent({
-      title: '',
-      start: '',
-      allDay: false,
-      id: 0
-    })
+    if (res.ok) {
+      const data = await res.json();
+      console.log("保存成功:", data);
+
+      // FullCalendar にも反映
+      setAllEvents([...allEvents, {
+        id: data.task_id,
+        title: data.title,
+        start: data.start_time,
+        allDay: false
+      }]);
+
+      setIsAddModalOpen_task(false); // モーダルを閉じる
+      setNewEvent({ title: '', start_time: '', required_time: 0, user_id: 1, is_task: true });
+    } else {
+      console.error("保存失敗", await res.text());
+    }
+  } catch (err) {
+    console.error("通信エラー", err);
   }
+};
+
+const handleAddSchedule = async () => {
+
+  if (!newEvent.title || !newEvent.start_time || !newEvent.required_time) {
+    alert("すべての項目を入力してください");
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...newEvent, is_task: false }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      console.log("予定保存成功:", data);
+
+      setAllEvents([...allEvents, {
+        id: data.task_id,
+        title: data.title,
+        start: data.start_time,
+        allDay: false
+      }]);
+
+      setIsAddModalOpen_schedule(false);
+      setNewEvent({ title: '', start_time: '', required_time: 0, user_id: 1, is_task: true });
+    } else {
+      console.error("予定保存失敗", await res.text());
+    }
+  } catch (err) {
+    console.error("通信エラー", err);
+  }
+};
+
+const closeDeleteModal = () => {
+  setShowDeleteModal(false);
+  setIdToDelete(null);
+};
+
 
   return (
     <>
@@ -144,45 +198,97 @@ export default function Home() {
             </li>
             <li>
               <button 
-                onClick={() => setIsAddModalOpen_task(true)}
+                onClick={() => {
+                  setDurationHour(0);
+                  setDurationMin(0);
+                  setNewEvent(e => ({ ...e, is_task: true }));   // タスク
+                  setIsAddModalOpen_task(true);
+                }}
                 className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition">
                 タスク追加
               </button>
-            </li>
-            <li>
-            <button
-              onClick={() => setIsAddModalOpen_schedule(true)}
-              className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition"
-            >
-              予定追加
-            </button>
+
+              <button
+                onClick={() => {
+                  setDurationHour(0);
+                  setDurationMin(0);
+                  setNewEvent(e => ({ ...e, is_task: false }));  // 予定
+                  setIsAddModalOpen_schedule(true);
+                }}
+                className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition"
+              >
+                予定追加
+              </button>
             </li>
           </ul>
         </div>
 
         {isAddModalOpen_schedule && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black bg-black/40 z-50">
+          <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
             <div className="bg-white rounded-lg shadow-lg w-96 p-6">
               <h2 className="text-2xl font-bold mb-4">予定を追加</h2>
 
-              <input
-                type="text"
-                placeholder="タイトル"
-                className="w-full border px-3 py-2 rounded mb-3"
-              />
-              <input
-                type="date"
-                className="w-full border px-3 py-2 rounded mb-3"
-              />
-              <input
-                type="time"
-                className="w-full border px-3 py-2 rounded mb-3"
-              />
-              <input
-                type="number"
-                placeholder="時間"
-                className="w-full border px-3 py-2 rounded mb-3"
-              />
+                  <input
+                    type="text"
+                    placeholder="タイトル"
+                    value={newEvent.title}
+                    onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                  />
+
+                  <input
+                    type="date"
+                    onChange={(e) => {
+                      const date = e.target.value;
+                      setNewEvent({
+                        ...newEvent,
+                        start_time: date + "T" + (newEvent.start_time.split("T")[1] || "00:00:00")
+                      });
+                    }}
+                  />
+
+                  <input
+                    type="time"
+                    onChange={(e) => {
+                      const time = e.target.value;
+                      setNewEvent({
+                        ...newEvent,
+                        start_time: (newEvent.start_time.split("T")[0] || new Date().toISOString().split("T")[0]) + "T" + time
+                      });
+                    }}
+                  />
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      className="w-20 border px-3 py-2 rounded"
+                      value={durationHour}
+                      onChange={(e) => {
+                        const h = clamp(Number(e.target.value || 0), 0, 9999);
+                        setDurationHour(h);
+                        updateRequiredMinutes(h, durationMin);
+                      }}
+                      placeholder="時間"
+                    />
+                    <span>時間</span>
+
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      step={1}
+                      className="w-20 border px-3 py-2 rounded"
+                      value={durationMin}
+                      onChange={(e) => {
+                        const m = clamp(Number(e.target.value || 0), 0, 59);
+                        setDurationMin(m);
+                        updateRequiredMinutes(durationHour, m);
+                      }}
+                      placeholder="分"
+                    />
+                    <span>分</span>
+                  </div>
 
               <div className="flex justify-end space-x-2">
                 <button
@@ -192,10 +298,89 @@ export default function Home() {
                   キャンセル
                 </button>
                 <button
-                  onClick={() => {
-                    // TODO: 予定追加処理
-                    setIsAddModalOpen_schedule(false)
+                  onClick={handleAddSchedule}
+                  className="px-4 py-2 rounded bg-violet-600 text-white hover:bg-violet-700"
+                >
+                  追加
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isAddModalOpen_task && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
+            <div className="bg-white rounded-lg shadow-lg w-96 p-6">
+              <h2 className="text-2xl font-bold mb-4">タスクを追加</h2>
+
+                <input
+                  type="text"
+                  placeholder="タイトル"
+                  value={newEvent.title}
+                  onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                />
+                <input
+                  type="date"
+                  onChange={(e) => {
+                    const date = e.target.value;
+                    setNewEvent({
+                      ...newEvent,
+                      start_time: date + "T" + (newEvent.start_time?.split("T")[1] || "00:00:00")
+                    });
                   }}
+                />
+                <input
+                  type="time"
+                  onChange={(e) => {
+                    const time = e.target.value;
+                    setNewEvent({
+                      ...newEvent,
+                      start_time: (newEvent.start_time?.split("T")[0] || new Date().toISOString().split("T")[0]) + "T" + time
+                    });
+                  }}
+                />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      className="w-20 border px-3 py-2 rounded"
+                      value={durationHour}
+                      onChange={(e) => {
+                        const h = clamp(Number(e.target.value || 0), 0, 9999);
+                        setDurationHour(h);
+                        updateRequiredMinutes(h, durationMin);
+                      }}
+                      placeholder="時間"
+                    />
+                    <span>時間</span>
+
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      step={1}
+                      className="w-20 border px-3 py-2 rounded"
+                      value={durationMin}
+                      onChange={(e) => {
+                        const m = clamp(Number(e.target.value || 0), 0, 59);
+                        setDurationMin(m);
+                        updateRequiredMinutes(durationHour, m);
+                      }}
+                      placeholder="分"
+                    />
+                    <span>分</span>
+                  </div>
+
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setIsAddModalOpen_task(false)}
+                  className="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleAddTask}
                   className="px-4 py-2 rounded bg-violet-600 text-white hover:bg-violet-700"
                 >
                   追加
@@ -206,7 +391,7 @@ export default function Home() {
         )}
 
         {isTaskManageModalOpen && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black bg-black/40 z-50">
+          <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
             <div className="bg-white rounded-lg shadow-lg w-96 p-6">
               <h2 className="text-2xl font-bold mb-4">タスク管理</h2>
 
@@ -243,50 +428,7 @@ export default function Home() {
           </div>
         )}
 
-        {isAddModalOpen_task && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black bg-black/40 z-50">
-            <div className="bg-white rounded-lg shadow-lg w-96 p-6">
-              <h2 className="text-2xl font-bold mb-4">タスクを追加</h2>
 
-              <input
-                type="text"
-                placeholder="タイトル"
-                className="w-full border px-3 py-2 rounded mb-3"
-              />
-              <input
-                type="date"
-                className="w-full border px-3 py-2 rounded mb-3"
-              />
-              <input
-                type="time"
-                className="w-full border px-3 py-2 rounded mb-3"
-              />
-              <input
-                type="number"
-                placeholder="時間"
-                className="w-full border px-3 py-2 rounded mb-3"
-              />
-
-              <div className="flex justify-end space-x-2">
-                <button
-                  onClick={() => setIsAddModalOpen_task(false)}
-                  className="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400"
-                >
-                  キャンセル
-                </button>
-                <button
-                  onClick={() => {
-                    // TODO: 予定追加処理
-                    setIsAddModalOpen_task(false)
-                  }}
-                  className="px-4 py-2 rounded bg-violet-600 text-white hover:bg-violet-700"
-                >
-                  追加
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* 削除モーダル */}
         <Transition.Root show={showDeleteModal} as={Fragment}>
@@ -343,7 +485,7 @@ export default function Home() {
                       <button
                         type="button"
                         className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
-                        onClick={handleCloseModal}
+                        onClick={closeDeleteModal}
                       >
                         Cancel
                       </button>
@@ -354,79 +496,7 @@ export default function Home() {
             </div>
           </Dialog>
         </Transition.Root>
-        
-        {/* 追加モーダル */}
-        <Transition.Root show={showModal} as={Fragment}>
-          <Dialog as="div" className="relative z-10" onClose={setShowModal}>
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0"
-              enterTo="opacity-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100"
-              leaveTo="opacity-0"
-            >
-              <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
-            </Transition.Child>
 
-            <div className="fixed inset-0 z-10 overflow-y-auto">
-              <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-                <Transition.Child
-                  as={Fragment}
-                  enter="ease-out duration-300"
-                  enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                  enterTo="opacity-100 translate-y-0 sm:scale-100"
-                  leave="ease-in duration-200"
-                  leaveFrom="opacity-100 translate-y-0 sm:scale-100"
-                  leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                >
-                  <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
-                    <div>
-                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-                        <CheckIcon className="h-6 w-6 text-green-600" aria-hidden="true" />
-                      </div>
-                      <div className="mt-3 text-center sm:mt-5">
-                        <Dialog.Title as="h3" className="text-base font-semibold leading-6 text-gray-900">
-                          Add Event
-                        </Dialog.Title>
-                        <form action="submit" onSubmit={handleSubmit}>
-                          <div className="mt-2">
-                            <input
-                              type="text"
-                              name="title"
-                              className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 
-                              focus:ring-2 focus:ring-inset focus:ring-violet-600 sm:text-sm sm:leading-6"
-                              value={newEvent.title}
-                              onChange={(e) => handleChange(e)}
-                              placeholder="Title"
-                            />
-                          </div>
-                          <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
-                            <button
-                              type="submit"
-                              className="inline-flex w-full justify-center rounded-md bg-violet-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 sm:col-start-2 disabled:opacity-25"
-                              disabled={newEvent.title === ''}
-                            >
-                              Create
-                            </button>
-                            <button
-                              type="button"
-                              className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:col-start-1 sm:mt-0"
-                              onClick={handleCloseModal}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-                    </div>
-                  </Dialog.Panel>
-                </Transition.Child>
-              </div>
-            </div>
-          </Dialog>
-        </Transition.Root>
       </main>
     </>
   )
