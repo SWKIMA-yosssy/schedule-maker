@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime,Time
 from sqlalchemy import Boolean
 from app.db import Base
 
@@ -11,7 +11,7 @@ class Task(Base):
     task_id = Column(Integer, primary_key=True, autoincrement=True)
     is_task = Column(Boolean, nullable=False, default=True)#pythonでいうbool型みたいなもん
     start_time = Column(DateTime(timezone=True))
-    required_time = Column(Integer)
+    required_time = Column(Time)
     user_id = Column(Integer)
     title = Column(String(1024))
 

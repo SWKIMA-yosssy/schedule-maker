@@ -7,7 +7,7 @@ from datetime import datetime,time
 class TaskBase(BaseModel):
     title: str = Field(None, example="倫理学の授業を受ける")
     start_time: datetime
-    required_time: int
+    required_time: time=Field(0,description="秒単位で入力")
     user_id: int
     is_task: bool = Field(False, description="この予定がタスクかどうか")
 

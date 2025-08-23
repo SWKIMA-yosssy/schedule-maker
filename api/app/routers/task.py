@@ -10,6 +10,7 @@ import app.cruds.task as task_crud
 from app.db import get_db
 import app.schemas.task as task_schema
 
+from fastapi import Query
 router = APIRouter()
 
 

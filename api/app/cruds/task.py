@@ -3,7 +3,7 @@ from sqlalchemy import select
 import app.models.task as task_model
 import app.schemas.task as task_schema
 from sqlalchemy.orm import selectinload
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta,time
 
 from typing import List,Tuple,Optional
 from sqlalchemy.engine import Result
@@ -26,7 +26,7 @@ async def get_task(db: AsyncSession, task_id: int) -> Optional[task_model.Task]:
     return task[0] if task is not None else None  # 要素が一つであってもtupleで返却されるので１つ目の要素を取り出す
 
 #完了フラグも一緒に取得 task_id,is_task,start_time,required_time,user_id,title,done
-async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,bool,datetime, int,int,str,bool]]:
+async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,bool,datetime, time,int,str,bool]]:
     result: Result = await (
         db.execute(
             select(
@@ -44,7 +44,7 @@ async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,bool,datetime,
 
 #やっていないかつ開始時点を持たないタスクを習得
 
-async def get_tasks_nodone_istask(db: AsyncSession) -> List[Tuple[int,bool,datetime, int,int,str,bool]]:
+async def get_tasks_nodone_istask(db: AsyncSession) -> List[Tuple[int,bool,datetime, time,int,str,bool]]:
     result: Result = await (
         db.execute(
             select(
