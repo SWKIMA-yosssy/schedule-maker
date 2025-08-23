@@ -13,4 +13,4 @@ echo "Database is up - running migrations..."
 python -m app.migrate_db
 
 echo "Starting web server..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload #毎回buildしなくてよいように

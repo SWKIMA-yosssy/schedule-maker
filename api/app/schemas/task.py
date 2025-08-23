@@ -29,7 +29,7 @@ class Task(TaskBase):
 
     @validator("done", pre=True, always=True)
     def set_done_from_relationship(cls, v, values):
-        return values.get("done") is not None
+        return bool(v)
 
     class Config:
         orm_mode = True
