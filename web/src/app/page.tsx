@@ -83,7 +83,7 @@ export default function Home() {
   }
 
   async function fetchIstaskNodone(): Promise<Task[]> {
-    const res = await fetch(`${API_BASE}/tasks/istasknodone`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE}/tasks/filterd?done=false&is_task=true`, { cache: "no-store" });
     if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
     return res.json();
   }
