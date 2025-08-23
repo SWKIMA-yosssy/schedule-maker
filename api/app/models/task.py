@@ -12,6 +12,7 @@ class Task(Base):
     is_task = Column(Boolean, nullable=False, default=True)#pythonでいうbool型みたいなもん
     start_time = Column(DateTime(timezone=True))
     required_time = Column(Time)
+    deadline=Column(DateTime(timezone=True), nullable=True, default=None)
     user_id = Column(Integer)
     title = Column(String(1024))
 
