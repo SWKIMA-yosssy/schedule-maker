@@ -3,10 +3,10 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import timeGridPlugin from '@fullcalendar/timegrid'
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useCallback } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { ExclamationTriangleIcon } from '@heroicons/react/20/solid'
-import { EventSourceInput } from '@fullcalendar/core/index.js'
+import type { EventSourceInput, DatesSetArg } from '@fullcalendar/core'
 import { useRef } from "react"
 import { CalendarApi } from '@fullcalendar/core'
 
@@ -17,6 +17,16 @@ interface Event {
   allDay: boolean;
   id: number;
 }
+
+type Task = {
+  task_id: number;
+  title: string;
+  start_time: string;        // ISO文字列
+  required_time?: number;
+  user_id?: number;
+  is_task?: boolean | number;
+  done?: boolean;
+};
 
 export default function Home() {
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -44,8 +54,7 @@ export default function Home() {
     const total = Math.max(0, h * 60 + m);
     setNewEvent(prev => ({ ...prev, required_time: total }));
   };
-
-
+  const toJstIso = (dateStr: string, timeStr: string) => `${dateStr}T${timeStr}:00+09:00`;
 
   function handleDateClick(arg: { date: Date; allDay: boolean }) {
     const api = calendarRef.current?.getApi();
@@ -64,81 +73,119 @@ export default function Home() {
     setIdToDelete(null)
   }
 
+  // ---- “年・月”で1か月分を取得（URLは /tasks/month?year=&month= と仮定）----
+  async function fetchMonthTasks(apiBase: string, year: number, month: number): Promise<Task[]> {
+    const date = `${year}-${String(month).padStart(2, '0')}-01`;
+    const url = `${apiBase}/tasks/month/${date}?year=${year}&month=${month}`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+    return res.json();
+  }
+
+  // ---- FullCalendar イベントへマッピング ----
+  function toEvents(tasks: Task[]) {
+    return tasks.map(t => ({
+      id: t.task_id,
+      title: t.title ?? "(no title)",
+      start: t.start_time,     // ISO そのまま
+      allDay: false,
+    }));
+  }
+
+  // FullCalendarの表示範囲が変わる度（初回含む）に発火
+  const handleDatesSet = async (info: any) => {
+
+    // 修正点：calendarRef経由で、カレンダーの中心日を直接取得する
+    const calendarApi = calendarRef.current?.getApi();
+    if (!calendarApi) return; // まれにAPIが取得できないことがあるのでガード
+    const d: Date = calendarApi.getDate();            // 表示中ビューの先頭近辺
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;        // 1始まり
+
+    try {
+      const tasks = await fetchMonthTasks(API_BASE, year, month);
+      setAllEvents(toEvents(tasks));
+    } catch (e) {
+      console.error("月間タスク取得に失敗:", e);
+    }
+  };
 
   const handleAddTask = async () => {
 
-  if (!newEvent.title || !newEvent.start_time || !newEvent.required_time) {
-    alert("すべての項目を入力してください");
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/tasks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...newEvent, is_task: true, user_id: 1 }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      console.log("保存成功:", data);
-
-      // FullCalendar にも反映
-      setAllEvents([...allEvents, {
-        id: data.task_id,
-        title: data.title,
-        start: data.start_time,
-        allDay: false
-      }]);
-
-      setIsAddModalOpen_task(false); // モーダルを閉じる
-      setNewEvent({ title: '', start_time: '', required_time: 0, user_id: 1, is_task: true });
-    } else {
-      console.error("保存失敗", await res.text());
+    if (!newEvent.title || !newEvent.start_time || !newEvent.required_time) {
+      alert("すべての項目を入力してください");
+      return;
     }
-  } catch (err) {
-    console.error("通信エラー", err);
-  }
-};
 
-const handleAddSchedule = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newEvent, is_task: true, user_id: 1 }),
+      });
 
-  if (!newEvent.title || !newEvent.start_time || !newEvent.required_time) {
-    alert("すべての項目を入力してください");
-    return;
-  }
-  try {
-    const res = await fetch(`${API_BASE}/tasks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...newEvent, is_task: false }),
-    });
+      if (res.ok) {
+        const data = await res.json();
+        console.log("保存成功:", data);
 
-    if (res.ok) {
-      const data = await res.json();
-      console.log("予定保存成功:", data);
+        // 今ある setAllEvents([...allEvents, {...}]) は削除してOK
+        const api = calendarRef.current?.getApi();
+        if (api) {
+          const cs: Date = api.view.currentStart;
+          const y = cs.getFullYear(), m = cs.getMonth() + 1;
+          const tasks = await fetchMonthTasks(API_BASE, y, m);
+          setAllEvents(toEvents(tasks));
+        }
 
-      setAllEvents([...allEvents, {
-        id: data.task_id,
-        title: data.title,
-        start: data.start_time,
-        allDay: false
-      }]);
-
-      setIsAddModalOpen_schedule(false);
-      setNewEvent({ title: '', start_time: '', required_time: 0, user_id: 1, is_task: true });
-    } else {
-      console.error("予定保存失敗", await res.text());
+        setIsAddModalOpen_task(false); // モーダルを閉じる
+        setNewEvent({ title: '', start_time: '', required_time: 0, user_id: 1, is_task: true });
+      } else {
+        console.error("保存失敗", await res.text());
+      }
+    } catch (err) {
+      console.error("通信エラー", err);
     }
-  } catch (err) {
-    console.error("通信エラー", err);
-  }
-};
+  };
 
-const closeDeleteModal = () => {
-  setShowDeleteModal(false);
-  setIdToDelete(null);
-};
+  const handleAddSchedule = async () => {
+
+    if (!newEvent.title || !newEvent.start_time || !newEvent.required_time) {
+      alert("すべての項目を入力してください");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newEvent, is_task: false }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log("予定保存成功:", data);
+
+        const api = calendarRef.current?.getApi();
+        if (api) {
+          const cs: Date = api.view.currentStart;
+          const y = cs.getFullYear(), m = cs.getMonth() + 1;
+          const tasks = await fetchMonthTasks(API_BASE, y, m);
+          setAllEvents(toEvents(tasks));
+        }
+
+        setIsAddModalOpen_schedule(false);
+        setNewEvent({ title: '', start_time: '', required_time: 0, user_id: 1, is_task: true });
+      } else {
+        console.error("予定保存失敗", await res.text());
+      }
+    } catch (err) {
+      console.error("通信エラー", err);
+    }
+  };
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+    setIdToDelete(null);
+  };
 
 
   return (
@@ -157,12 +204,13 @@ const closeDeleteModal = () => {
               right: 'next dayGridMonth,timeGridWeek hamburger'
             }}
             customButtons={{
-                hamburger: {
+              hamburger: {
                 text: '☰', // ← ハンバーガーアイコン
                 click: () => setIsSidebarOpen(true)
               }
             }}
-    
+            initialView="dayGridMonth"
+            datesSet={handleDatesSet}
             events={allEvents as EventSourceInput}
             nowIndicator={true}
             editable={true}
@@ -173,41 +221,49 @@ const closeDeleteModal = () => {
           />
         </div>
 
-                {/* サイドバー */}
+        {/*サイドバーが表示されているときに出現する半透明なカーテン*/}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/30 z-40"
+            onClick={() => setIsSidebarOpen(false)}
+          ></div>
+        )}
         <div
           className={`fixed top-0 right-0 h-full w-64 bg-violet-50 shadow-lg transform 
           ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} 
           transition-transform duration-300 ease-in-out z-50`}
         >
           <div className="p-4 border-b flex justify-between items-center">
-            <h2 className="text-9xl font-bold">メニュー</h2>
-          <button 
-            onClick={() => setIsSidebarOpen(false)} 
-            className="text-xl font-bold text-gray-500 hover:text-gray-700 leading-none"
-          >
-            ✕
-          </button>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="text-3xl font-bold text-gray-500 hover:text-gray-700 leading-none p-2"
+            >
+              {isSidebarOpen ? '<' : '>'}
+            </button>
+            <h2 className="text-xl font-bold">メニュー</h2>
+            <div className="w-8"></div>
           </div>
-          <ul className="p-4 space-y-4 text-3xl">
+          <ul className="text-2xl space-y-4">
             <li>
-              <button 
+              <button
                 onClick={() => setIsTaskManageModalOpen(true)}
-                className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition">
+                className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition text-lg">
                 タスク管理
               </button>
             </li>
             <li>
-              <button 
+              <button
                 onClick={() => {
                   setDurationHour(0);
                   setDurationMin(0);
                   setNewEvent(e => ({ ...e, is_task: true }));   // タスク
                   setIsAddModalOpen_task(true);
                 }}
-                className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition">
+                className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition text-lg">
                 タスク追加
               </button>
-
+            </li>
+            <li>
               <button
                 onClick={() => {
                   setDurationHour(0);
@@ -215,7 +271,7 @@ const closeDeleteModal = () => {
                   setNewEvent(e => ({ ...e, is_task: false }));  // 予定
                   setIsAddModalOpen_schedule(true);
                 }}
-                className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition"
+                className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition text-lg"
               >
                 予定追加
               </button>
@@ -228,67 +284,63 @@ const closeDeleteModal = () => {
             <div className="bg-white rounded-lg shadow-lg w-96 p-6">
               <h2 className="text-2xl font-bold mb-4">予定を追加</h2>
 
-                  <input
-                    type="text"
-                    placeholder="タイトル"
-                    value={newEvent.title}
-                    onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
-                  />
+              <input
+                type="text"
+                placeholder="タイトル"
+                value={newEvent.title}
+                onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+              />
 
-                  <input
-                    type="date"
-                    onChange={(e) => {
-                      const date = e.target.value;
-                      setNewEvent({
-                        ...newEvent,
-                        start_time: date + "T" + (newEvent.start_time.split("T")[1] || "00:00:00")
-                      });
-                    }}
-                  />
+              <input
+                type="date"
+                onChange={(e) => {
+                  const date = e.target.value;
+                  const time = newEvent.start_time.split("T")[1]?.slice(0, 5) || "00:00";
+                  setNewEvent({ ...newEvent, start_time: toJstIso(date, time) });
+                }}
+              />
 
-                  <input
-                    type="time"
-                    onChange={(e) => {
-                      const time = e.target.value;
-                      setNewEvent({
-                        ...newEvent,
-                        start_time: (newEvent.start_time.split("T")[0] || new Date().toISOString().split("T")[0]) + "T" + time
-                      });
-                    }}
-                  />
+              <input
+                type="time"
+                onChange={(e) => {
+                  const time = e.target.value;
+                  const date = newEvent.start_time.split("T")[0] || new Date().toISOString().slice(0, 10);
+                  setNewEvent({ ...newEvent, start_time: toJstIso(date, time) });
+                }}
+              />
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      className="w-20 border px-3 py-2 rounded"
-                      value={durationHour}
-                      onChange={(e) => {
-                        const h = clamp(Number(e.target.value || 0), 0, 9999);
-                        setDurationHour(h);
-                        updateRequiredMinutes(h, durationMin);
-                      }}
-                      placeholder="時間"
-                    />
-                    <span>時間</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="w-20 border px-3 py-2 rounded"
+                  value={durationHour}
+                  onChange={(e) => {
+                    const h = clamp(Number(e.target.value || 0), 0, 9999);
+                    setDurationHour(h);
+                    updateRequiredMinutes(h, durationMin);
+                  }}
+                  placeholder="時間"
+                />
+                <span>時間</span>
 
-                    <input
-                      type="number"
-                      min={0}
-                      max={59}
-                      step={1}
-                      className="w-20 border px-3 py-2 rounded"
-                      value={durationMin}
-                      onChange={(e) => {
-                        const m = clamp(Number(e.target.value || 0), 0, 59);
-                        setDurationMin(m);
-                        updateRequiredMinutes(durationHour, m);
-                      }}
-                      placeholder="分"
-                    />
-                    <span>分</span>
-                  </div>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  step={1}
+                  className="w-20 border px-3 py-2 rounded"
+                  value={durationMin}
+                  onChange={(e) => {
+                    const m = clamp(Number(e.target.value || 0), 0, 59);
+                    setDurationMin(m);
+                    updateRequiredMinutes(durationHour, m);
+                  }}
+                  placeholder="分"
+                />
+                <span>分</span>
+              </div>
 
               <div className="flex justify-end space-x-2">
                 <button
@@ -313,64 +365,60 @@ const closeDeleteModal = () => {
             <div className="bg-white rounded-lg shadow-lg w-96 p-6">
               <h2 className="text-2xl font-bold mb-4">タスクを追加</h2>
 
+              <input
+                type="text"
+                placeholder="タイトル"
+                value={newEvent.title}
+                onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+              />
+              <input
+                type="date"
+                onChange={(e) => {
+                  const date = e.target.value;
+                  const time = newEvent.start_time.split("T")[1]?.slice(0, 5) || "00:00";
+                  setNewEvent({ ...newEvent, start_time: toJstIso(date, time) });
+                }}
+              />
+              <input
+                type="time"
+                onChange={(e) => {
+                  const time = e.target.value;
+                  const date = newEvent.start_time.split("T")[0] || new Date().toISOString().slice(0, 10);
+                  setNewEvent({ ...newEvent, start_time: toJstIso(date, time) });
+                }}
+              />
+              <div className="flex items-center gap-2">
                 <input
-                  type="text"
-                  placeholder="タイトル"
-                  value={newEvent.title}
-                  onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
-                />
-                <input
-                  type="date"
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="w-20 border px-3 py-2 rounded"
+                  value={durationHour}
                   onChange={(e) => {
-                    const date = e.target.value;
-                    setNewEvent({
-                      ...newEvent,
-                      start_time: date + "T" + (newEvent.start_time?.split("T")[1] || "00:00:00")
-                    });
+                    const h = clamp(Number(e.target.value || 0), 0, 9999);
+                    setDurationHour(h);
+                    updateRequiredMinutes(h, durationMin);
                   }}
+                  placeholder="時間"
                 />
-                <input
-                  type="time"
-                  onChange={(e) => {
-                    const time = e.target.value;
-                    setNewEvent({
-                      ...newEvent,
-                      start_time: (newEvent.start_time?.split("T")[0] || new Date().toISOString().split("T")[0]) + "T" + time
-                    });
-                  }}
-                />
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      className="w-20 border px-3 py-2 rounded"
-                      value={durationHour}
-                      onChange={(e) => {
-                        const h = clamp(Number(e.target.value || 0), 0, 9999);
-                        setDurationHour(h);
-                        updateRequiredMinutes(h, durationMin);
-                      }}
-                      placeholder="時間"
-                    />
-                    <span>時間</span>
+                <span>時間</span>
 
-                    <input
-                      type="number"
-                      min={0}
-                      max={59}
-                      step={1}
-                      className="w-20 border px-3 py-2 rounded"
-                      value={durationMin}
-                      onChange={(e) => {
-                        const m = clamp(Number(e.target.value || 0), 0, 59);
-                        setDurationMin(m);
-                        updateRequiredMinutes(durationHour, m);
-                      }}
-                      placeholder="分"
-                    />
-                    <span>分</span>
-                  </div>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  step={1}
+                  className="w-20 border px-3 py-2 rounded"
+                  value={durationMin}
+                  onChange={(e) => {
+                    const m = clamp(Number(e.target.value || 0), 0, 59);
+                    setDurationMin(m);
+                    updateRequiredMinutes(durationHour, m);
+                  }}
+                  placeholder="分"
+                />
+                <span>分</span>
+              </div>
 
               <div className="flex justify-end space-x-2">
                 <button
@@ -405,7 +453,7 @@ const closeDeleteModal = () => {
                         <p className="font-semibold">{task.title}</p>
                         <p className="text-sm text-gray-500">{task.date} {task.time}（{task.hours}時間）</p>
                       </div>
-                      <button 
+                      <button
                         onClick={() => setTasks(tasks.filter(t => t.id !== task.id))}
                         className="text-red-500 hover:text-red-700"
                       >
