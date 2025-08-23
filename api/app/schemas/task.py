@@ -8,6 +8,7 @@ class TaskBase(BaseModel):
     title: str = Field(None, example="倫理学の授業を受ける")
     start_time: datetime
     required_time: time=Field(0,description="秒単位で入力")
+    deadline:datetime=Field(None,description="締め切り日時")
     user_id: int
     is_task: bool = Field(False, description="この予定がタスクかどうか")
 

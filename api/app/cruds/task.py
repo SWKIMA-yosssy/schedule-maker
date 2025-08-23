@@ -25,8 +25,8 @@ async def get_task(db: AsyncSession, task_id: int) -> Optional[task_model.Task]:
     task: Optional[Tuple[task_model.Task]] = result.first()
     return task[0] if task is not None else None  # 要素が一つであってもtupleで返却されるので１つ目の要素を取り出す
 
-#完了フラグも一緒に取得 task_id,is_task,start_time,required_time,user_id,title,done
-async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,bool,datetime, time,int,str,bool]]:
+#完了フラグも一緒に取得 task_id,is_task,start_time,required_time,deadline,user_id,title,done
+async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,bool,datetime, time,datetime,int,str,bool]]:
     result: Result = await (
         db.execute(
             select(
@@ -34,6 +34,7 @@ async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,bool,datetime,
                 task_model.Task.is_task,
                 task_model.Task.start_time,
                 task_model.Task.required_time,
+                task_model.Task.deadline,
                 task_model.Task.user_id,
                 task_model.Task.title,
                 task_model.Done.task_id.isnot(None).label("done"),
@@ -48,7 +49,7 @@ async def get_tasks_filterd(
         db: AsyncSession,
         Done:bool,
         is_task:bool
-        ) -> List[Tuple[int,bool,datetime, time,int,str,bool]]:
+        ) -> List[Tuple[int,bool,datetime, time,datetime,int,str,bool]]:
     # Done が True の場合は done があるもの、False の場合は done がないもの
     done_filter = task_model.Done.task_id.isnot(None) if Done else task_model.Done.task_id.is_(None)
 
@@ -61,6 +62,7 @@ async def get_tasks_filterd(
                 task_model.Task.is_task,
                 task_model.Task.start_time,
                 task_model.Task.required_time,
+                task_model.Task.deadline,
                 task_model.Task.user_id,
                 task_model.Task.title,
                 task_model.Done.task_id.isnot(None).label("done"),
