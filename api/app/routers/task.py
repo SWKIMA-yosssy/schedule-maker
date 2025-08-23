@@ -1,4 +1,4 @@
-from typing import List
+from typing import List,Optional
 from datetime import datetime, date
 from fastapi import APIRouter, Depends
 
@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 import app.cruds.task as task_crud
-
 from app.db import get_db
 import app.schemas.task as task_schema
 
@@ -45,3 +44,12 @@ async def list_tasks_by_month(
 @router.delete("/task/{task_id}")
 async def delete_task():
     pass
+
+@router.get("/tasks/nearest/{target_date}", response_model=Optional[int])
+async def get_nearest_task(
+    date: date, db: AsyncSession = Depends(get_db)
+):
+    return await task_crud.get_nearest_deadline_task(db,date)
+
+
+

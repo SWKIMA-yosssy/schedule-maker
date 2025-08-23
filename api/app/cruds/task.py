@@ -4,7 +4,7 @@ import app.models.task as task_model
 import app.schemas.task as task_schema
 from sqlalchemy.orm import selectinload
 from datetime import date, datetime, timedelta
-
+from typing import Optional#|を使えないため
 
 async def create_task(
     db: AsyncSession, task_create: task_schema.TaskCreate
@@ -63,3 +63,16 @@ async def get_tasks_by_month(
     )
 
     return result.scalars().all()
+
+# 指定日から最も締め切りの近いタスクの id を返す#search pinch
+async def get_nearest_deadline_task(
+    db: AsyncSession, target_date: date
+) -> Optional[int]:
+    result = await db.execute(
+        select(task_model.Task)
+        .where(task_model.Task.required_time >= target_date)  # 今日以降
+        .order_by(task_model.Task.required_time.asc())        # 締切の早い順
+        .limit(1)                                        # 先頭1件
+    )
+    task = result.scalar_one_or_none()
+    return task.task_id if task else None
