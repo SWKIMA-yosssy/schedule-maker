@@ -3,10 +3,10 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import timeGridPlugin from '@fullcalendar/timegrid'
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useCallback } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { ExclamationTriangleIcon } from '@heroicons/react/20/solid'
-import { EventSourceInput } from '@fullcalendar/core/index.js'
+import type { EventSourceInput, DatesSetArg } from '@fullcalendar/core'
 import { useRef } from "react"
 import { CalendarApi } from '@fullcalendar/core'
 
@@ -17,6 +17,16 @@ interface Event {
   allDay: boolean;
   id: number;
 }
+
+type Task = {
+  task_id: number;
+  title: string;
+  start_time: string;        // ISO文字列
+  required_time?: number;
+  user_id?: number;
+  is_task?: boolean | number;
+  done?: boolean;
+};
 
 export default function Home() {
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -44,8 +54,7 @@ export default function Home() {
     const total = Math.max(0, h * 60 + m);
     setNewEvent(prev => ({ ...prev, required_time: total }));
   };
-
-
+  const toJstIso = (dateStr: string, timeStr: string) => `${dateStr}T${timeStr}:00+09:00`;
 
   function handleDateClick(arg: { date: Date; allDay: boolean }) {
     const api = calendarRef.current?.getApi();
@@ -64,6 +73,38 @@ export default function Home() {
     setIdToDelete(null)
   }
 
+  // ---- “年・月”で1か月分を取得（URLは /tasks/month?year=&month= と仮定）----
+  async function fetchMonthTasks(apiBase: string, year: number, month: number): Promise<Task[]> {
+  const url = `${apiBase}/tasks/month?year=${year}&month=${month}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+  return res.json();
+  }
+
+// ---- FullCalendar イベントへマッピング ----
+  function toEvents(tasks: Task[]) {
+    return tasks.map(t => ({
+      id: t.task_id,
+      title: t.title ?? "(no title)",
+      start: t.start_time,     // ISO そのまま
+      allDay: false,
+    }));
+  }
+
+  // FullCalendarの表示範囲が変わる度（初回含む）に発火
+  const handleDatesSet = useCallback(async (info: any) => {
+    const d: Date = info.start;            // 表示中ビューの先頭近辺
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;        // 1始まり
+
+    try {
+      const tasks = await fetchMonthTasks(API_BASE, year, month);
+      setAllEvents(toEvents(tasks));
+    } catch (e) {
+      console.error("月間タスク取得に失敗:", e);
+      setAllEvents([]);
+    }
+  }, [API_BASE]);
 
   const handleAddTask = async () => {
 
@@ -83,13 +124,14 @@ export default function Home() {
       const data = await res.json();
       console.log("保存成功:", data);
 
-      // FullCalendar にも反映
-      setAllEvents([...allEvents, {
-        id: data.task_id,
-        title: data.title,
-        start: data.start_time,
-        allDay: false
-      }]);
+    // 今ある setAllEvents([...allEvents, {...}]) は削除してOK
+    const api = calendarRef.current?.getApi();
+    if (api) {
+      const cs: Date = api.view.currentStart;
+      const y = cs.getFullYear(), m = cs.getMonth() + 1;
+      const tasks = await fetchMonthTasks(API_BASE, y, m);
+      setAllEvents(toEvents(tasks));
+    }
 
       setIsAddModalOpen_task(false); // モーダルを閉じる
       setNewEvent({ title: '', start_time: '', required_time: 0, user_id: 1, is_task: true });
@@ -118,12 +160,13 @@ const handleAddSchedule = async () => {
       const data = await res.json();
       console.log("予定保存成功:", data);
 
-      setAllEvents([...allEvents, {
-        id: data.task_id,
-        title: data.title,
-        start: data.start_time,
-        allDay: false
-      }]);
+     const api = calendarRef.current?.getApi();
+      if (api) {
+       const cs: Date = api.view.currentStart;
+       const y = cs.getFullYear(), m = cs.getMonth() + 1;
+       const tasks = await fetchMonthTasks(API_BASE, y, m);
+       setAllEvents(toEvents(tasks));
+      }
 
       setIsAddModalOpen_schedule(false);
       setNewEvent({ title: '', start_time: '', required_time: 0, user_id: 1, is_task: true });
@@ -162,7 +205,8 @@ const closeDeleteModal = () => {
                 click: () => setIsSidebarOpen(true)
               }
             }}
-    
+            initialView="dayGridMonth"
+            datesSet={handleDatesSet}
             events={allEvents as EventSourceInput}
             nowIndicator={true}
             editable={true}
@@ -239,10 +283,8 @@ const closeDeleteModal = () => {
                     type="date"
                     onChange={(e) => {
                       const date = e.target.value;
-                      setNewEvent({
-                        ...newEvent,
-                        start_time: date + "T" + (newEvent.start_time.split("T")[1] || "00:00:00")
-                      });
+                      const time = newEvent.start_time.split("T")[1]?.slice(0,5) || "00:00";
+                      setNewEvent({ ...newEvent, start_time: toJstIso(date, time) });
                     }}
                   />
 
@@ -250,10 +292,8 @@ const closeDeleteModal = () => {
                     type="time"
                     onChange={(e) => {
                       const time = e.target.value;
-                      setNewEvent({
-                        ...newEvent,
-                        start_time: (newEvent.start_time.split("T")[0] || new Date().toISOString().split("T")[0]) + "T" + time
-                      });
+                      const date = newEvent.start_time.split("T")[0] || new Date().toISOString().slice(0,10);
+                      setNewEvent({ ...newEvent, start_time: toJstIso(date, time) });
                     }}
                   />
 
@@ -323,20 +363,16 @@ const closeDeleteModal = () => {
                   type="date"
                   onChange={(e) => {
                     const date = e.target.value;
-                    setNewEvent({
-                      ...newEvent,
-                      start_time: date + "T" + (newEvent.start_time?.split("T")[1] || "00:00:00")
-                    });
+                    const time = newEvent.start_time.split("T")[1]?.slice(0,5) || "00:00";
+                    setNewEvent({ ...newEvent, start_time: toJstIso(date, time) });
                   }}
                 />
                 <input
                   type="time"
                   onChange={(e) => {
                     const time = e.target.value;
-                    setNewEvent({
-                      ...newEvent,
-                      start_time: (newEvent.start_time?.split("T")[0] || new Date().toISOString().split("T")[0]) + "T" + time
-                    });
+                      const date = newEvent.start_time.split("T")[0] || new Date().toISOString().slice(0,10);
+                      setNewEvent({ ...newEvent, start_time: toJstIso(date, time) });
                   }}
                 />
                   <div className="flex items-center gap-2">
