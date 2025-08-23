@@ -1,5 +1,5 @@
 from typing import List,Tuple,Optional
-from datetime import datetime, date,time, timedelta
+from datetime import datetime, date,time, timedelta,timezone
 from fastapi import APIRouter, Depends,HTTPException,Query
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,10 +67,47 @@ async def delete_task(task_id: int, db: AsyncSession = Depends(get_db)):
 
     return await task_crud.delete_task(db, original=task)
 
+@router.put("/tasks/{task_id}", response_model=task_schema.TaskCreateResponse)
+async def update_task(
+    task_id: int, task_body: task_schema.TaskCreate, db: AsyncSession = Depends(get_db)
+):
+    task = await task_crud.get_task(db, task_id=task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return await task_crud.update_task(db, task_body, original=task)
 
 #テトリス用関数は以下に
-@router.get("/tasks/nearest/{target_date}", response_model=Optional[int])
-async def get_nearest_task(
+#最も直近のTodoのIDを取得
+@router.get("/tasks/nearestTodo/{date}", response_model=Optional[int])
+async def get_nearest_todo(
     date: datetime, db: AsyncSession = Depends(get_db)
 ):
     return await task_crud.get_nearest_deadline_task(db,date)
+
+#最も直近の予定のIDを取得
+@router.get("/tasks/nearestschedule/{date}", response_model=Optional[int])
+async def get_nearest_schedule(
+    date: datetime, db: AsyncSession = Depends(get_db)
+):
+    return await task_crud.get_nearest_starttime_task(db,date)
+
+#本番のテトリス関数
+@router.post("/run")
+async def run_tetris(
+    current_time: Optional[datetime] = Query(
+        None,
+        description="テトリスを開始する時間（省略時は現在時刻）"
+    ),
+    db: AsyncSession = Depends(get_db)
+):
+    # current_timeが指定されていなければ現在時刻
+    if current_time is None:
+        current_time = datetime.now(timezone.utc)
+
+    try:
+        result = await task_crud.tetris(db, current_time)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"next_schedule_id": result, "message": "Tetris executed successfully"}

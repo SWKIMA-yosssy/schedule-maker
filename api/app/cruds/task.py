@@ -17,6 +17,15 @@ async def create_task(
     await db.refresh(task)
     return task
 
+async def update_task(
+    db: AsyncSession, task_create: task_schema.TaskCreate, original: task_model.Task
+) -> task_model.Task:
+    original.title = task_create.title
+    db.add(original)
+    await db.commit()
+    await db.refresh(original)
+    return original
+
 # 指定したIDのタスクを取得
 async def get_task(db: AsyncSession, task_id: int) -> Optional[task_model.Task]:
     result: Result = await db.execute(
@@ -189,12 +198,15 @@ async def sum_required_time_per_day_by_month(
 async def get_nearest_deadline_task(
     db: AsyncSession, target_date: datetime
 ) -> Optional[int]:
-    is_task_filter = task_model.Task.is_task.is_not(False)
+    is_task_filter = task_model.Task.is_task.is_(True)
+    done_filter = task_model.Done.task_id.is_(None)
     result = await db.execute(
         select(task_model.Task)
+        .outerjoin(task_model.Done)
         .where(
                task_model.Task.deadline >= target_date,#今日以降
-               is_task_filter#Todoである
+               is_task_filter,#Todoである
+                done_filter#完了していない
                )  
         .order_by(task_model.Task.deadline.asc())        # 締切の早い順
         .limit(1)                                        # 先頭1件
@@ -203,3 +215,108 @@ async def get_nearest_deadline_task(
     return task.task_id if task else None
 
 #最も直近の予定のIDを取得
+async def get_nearest_starttime_task(
+    db: AsyncSession, target_date: datetime
+) -> Optional[int]:
+    is_task_filter = task_model.Task.is_task.is_(False)
+    done_filter = task_model.Done.task_id.is_(None)
+    result = await db.execute(
+        select(task_model.Task)
+        .outerjoin(task_model.Done)
+        .where(
+               task_model.Task.start_time >= target_date,#今日以降
+               is_task_filter,#予定(Todoでない)
+               done_filter#完了していない
+               )  
+        .order_by(task_model.Task.start_time.asc())        # 締切の早い順
+        .limit(1)                                        # 先頭1件
+    )
+    task = result.scalar_one_or_none()
+    return task.task_id if task else None
+
+#timedeltaをtime型に変換
+def timedelta_to_time(td: timedelta) -> time:
+    total_seconds = int(td.total_seconds())
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    hours = hours % 24  # 24時間以上の分は切り捨て
+    return time(hour=hours, minute=minutes, second=seconds)
+
+
+# 本番のテトリス関数
+async def tetris(
+    db: AsyncSession,
+    current_time: datetime  # どこから予定テトリスを始めるか
+) -> Optional[int]:
+    # 最も締め切りの近いTodoを取得
+    todo_id = await get_nearest_deadline_task(db, current_time)
+    # 最も開始時点の近い予定を取得
+    schedule_id = await get_nearest_starttime_task(db, current_time)
+
+    # todoが無ければ終了
+    if todo_id is None:
+        return schedule_id
+
+    # Todoの情報を取得
+    todo_task = await get_task(db, todo_id)
+    t= todo_task.required_time  # timedelta型を推奨！
+    reqtime = timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
+    # 次の予定が無いなら → そのままTodoをスケジュール化
+    if schedule_id is None:
+        new_schedule = task_schema.TaskCreate(
+            is_task=False,
+            start_time=current_time,
+            required_time=timedelta_to_time(reqtime),
+            deadline=None,
+            user_id=todo_task.user_id,
+            title=todo_task.title,
+        )
+        await create_task(db, new_schedule)
+        return None  # 再帰不要
+
+    # scheduleの情報を取得
+    schedule_task = await get_task(db, schedule_id)
+    starttime: datetime = schedule_task.start_time
+
+    # 空き時間を計算
+    free_time = starttime - current_time
+    total_seconds = int(free_time.total_seconds())
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    hours=hours%24
+    free_time_as_time = time(hour=hours, minute=minutes, second=seconds)
+    # 空き時間 >= 必要時間 の場合
+    if free_time >= reqtime:
+        new_schedule = task_schema.TaskCreate(
+            is_task=False,
+            start_time=current_time,
+            required_time=t,
+            deadline=None,
+            user_id=todo_task.user_id,
+            title=todo_task.title,
+        )
+        new_current_time = current_time + reqtime
+        await create_task(db, new_schedule)
+
+    # 空き時間 < 必要時間 の場合 → 分割
+    else:
+        new_schedule = task_schema.TaskCreate(
+            is_task=False,
+            start_time=current_time,
+            required_time=free_time_as_time,
+            deadline=None,
+            user_id=todo_task.user_id,
+            title=todo_task.title,
+        )
+        new_current_time = starttime
+        new_reqtime = reqtime - free_time  # 残り時間
+
+        # Todoを更新（残り時間を反映）
+        updated_todo = task_schema.TaskUpdate(required_time=timedelta_to_time(new_reqtime))
+        await update_task(db, todo_task, updated_todo)
+
+        await create_task(db, new_schedule)
+
+    # 再帰呼び出し
+    return await tetris(db, new_current_time)
+

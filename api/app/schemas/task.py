@@ -34,3 +34,10 @@ class Task(TaskBase):
 
     class Config:
         orm_mode = True
+        
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    start_time: Optional[datetime] = None
+    required_time: Optional[time] = None
+    deadline: Optional[datetime] = None
+    is_task: Optional[bool] = None
