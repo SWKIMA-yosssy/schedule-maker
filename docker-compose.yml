@@ -15,6 +15,7 @@ services:
     build:
       context: .
       dockerfile: ./api/Dockerfile
+    command: /code/entrypoint.sh
     ports:
       - 8000:8000
     volumes:
