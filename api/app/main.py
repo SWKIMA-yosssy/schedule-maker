@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import task
+from app.routers import task, done
 app = FastAPI()
 
 app.include_router(task.router)
+app.include_router(done.router)
 
 origins = [
     "http://127.0.0.1:3000/",
