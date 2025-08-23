@@ -25,6 +25,7 @@ class TaskCreateResponse(TaskCreate):
 
 class Task(TaskBase):
     task_id: Optional[int] = Field(None)
+    done: bool = Field(False, description="完了フラグ")
 
     class Config:
         orm_mode = True

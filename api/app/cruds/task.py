@@ -21,7 +21,11 @@ async def get_tasks_by_date(
     start_of_day = datetime.combine(target_date, datetime.min.time())
     end_of_day = start_of_day + timedelta(days=1)
     result = await db.execute(
-        select(task_model.Task).where(
+        select(
+            task_model.Task,
+            task_model.Done.task_id.isnot(None).label("done")
+        ).outerjoin(task_model.Done
+                    ).where(
             task_model.Task.start_time >= start_of_day,
             task_model.Task.start_time < end_of_day
         )
