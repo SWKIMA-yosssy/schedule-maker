@@ -3,7 +3,8 @@ FROM python:3.9
 
 # 
 WORKDIR /code
-
+# entrypoint.shをコンテナ内にコピー
+COPY ./api/entrypoint.sh /code/entrypoint.sh
 # 
 COPY ./api/requirements.txt /code/requirements.txt
 
