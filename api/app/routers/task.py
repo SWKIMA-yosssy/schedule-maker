@@ -30,12 +30,17 @@ async def create_task(
     return await task_crud.create_task(db, task_body)
 
 
-@router.get("/tasks/{date}", response_model=list[task_schema.Task])
+@router.get("/tasks/day/{date}", response_model=list[task_schema.Task])
 async def list_tasks_by_date(
         date: date, db: AsyncSession = Depends(get_db)
 ):
     return await task_crud.get_tasks_by_date(db, date)
 
+@router.get("/tasks/month/{date}", response_model=list[task_schema.Task])
+async def list_tasks_by_month(
+        year:int,month:int, db: AsyncSession = Depends(get_db)
+):
+    return await task_crud.get_tasks_by_month(db, year,month)
 
 @router.delete("/task/{task_id}")
 async def delete_task():
