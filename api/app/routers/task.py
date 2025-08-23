@@ -13,22 +13,20 @@ import app.schemas.task as task_schema
 router = APIRouter()
 
 
-@router.get("/tasks")
-async def list_task():
-    return [task_schema.Task(id=1,
-                             title="1つ目のタスク",
-                             start_time=datetime.now(),
-                             required_time=30,
-                             user_id=1,
-                             is_task=True)]
+@router.get("/tasks",response_model=List[task_schema.Task])
+async def list_tasks(db: AsyncSession = Depends(get_db)):
+    return await task_crud.get_tasks_with_done(db)
 
+@router.get("/tasks/istasknodone",response_model=List[task_schema.Task])
+async def list_tasks_nodone_istask(db: AsyncSession = Depends(get_db)):
+    return await task_crud.get_tasks_nodone_istask(db)
 
 @router.post("/tasks", response_model=task_schema.TaskCreateResponse)
 async def create_task(
     task_body: task_schema.TaskCreate, db: AsyncSession = Depends(get_db)
 ):
     return await task_crud.create_task(db, task_body)
-
+#なぜかtureを受け付けない1で入れないとだめ
 
 @router.get("/tasks/day/{date}", response_model=list[task_schema.Task])
 async def list_tasks_by_date(
