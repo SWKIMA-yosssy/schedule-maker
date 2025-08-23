@@ -1,4 +1,4 @@
-from typing import List,Tuple
+from typing import List,Tuple,Optional
 from datetime import datetime, date,time, timedelta
 from fastapi import APIRouter, Depends,HTTPException,Query
 
@@ -66,3 +66,11 @@ async def delete_task(task_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Task not found")
 
     return await task_crud.delete_task(db, original=task)
+
+
+#テトリス用関数は以下に
+@router.get("/tasks/nearest/{target_date}", response_model=Optional[int])
+async def get_nearest_task(
+    date: datetime, db: AsyncSession = Depends(get_db)
+):
+    return await task_crud.get_nearest_deadline_task(db,date)

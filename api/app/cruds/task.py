@@ -182,3 +182,24 @@ async def sum_required_time_per_day_by_month(
         total_required_time=await return_sumreq_by_date(db,current_date)
         result_list.append((current_date,total_required_time))
     return result_list
+
+#テトリス用関数は以下に
+
+# 締切が最も近いTodoのIDを取得
+async def get_nearest_deadline_task(
+    db: AsyncSession, target_date: datetime
+) -> Optional[int]:
+    is_task_filter = task_model.Task.is_task.is_not(False)
+    result = await db.execute(
+        select(task_model.Task)
+        .where(
+               task_model.Task.deadline >= target_date,#今日以降
+               is_task_filter#Todoである
+               )  
+        .order_by(task_model.Task.deadline.asc())        # 締切の早い順
+        .limit(1)                                        # 先頭1件
+    )
+    task = result.scalar_one_or_none()
+    return task.task_id if task else None
+
+#最も直近の予定のIDを取得
