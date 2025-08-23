@@ -1,6 +1,6 @@
 from typing import List
 from datetime import datetime, date
-from fastapi import APIRouter, Depends,HTTPException
+from fastapi import APIRouter, Depends,HTTPException,Query
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,9 +18,13 @@ router = APIRouter()
 async def list_tasks(db: AsyncSession = Depends(get_db)):
     return await task_crud.get_tasks_with_done(db)
 
-@router.get("/tasks/istasknodone",response_model=List[task_schema.Task])
-async def list_tasks_nodone_istask(db: AsyncSession = Depends(get_db)):
-    return await task_crud.get_tasks_nodone_istask(db)
+@router.get("/tasks/filterd", response_model=List[task_schema.Task])
+async def list_tasks_filterd(
+    db: AsyncSession = Depends(get_db),
+    done: bool = Query(True, description="完了済みならTrue"),
+    is_task: bool = Query(True, description="タスクならTrue")
+):
+    return await task_crud.get_tasks_filterd(db, Done=done, is_task=is_task)
 
 @router.post("/tasks", response_model=task_schema.TaskCreateResponse)
 async def create_task(

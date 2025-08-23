@@ -44,7 +44,16 @@ async def get_tasks_with_done(db: AsyncSession) -> List[Tuple[int,bool,datetime,
 
 #やっていないかつ開始時点を持たないタスクを習得
 
-async def get_tasks_nodone_istask(db: AsyncSession) -> List[Tuple[int,bool,datetime, time,int,str,bool]]:
+async def get_tasks_filterd(
+        db: AsyncSession,
+        Done:bool,
+        is_task:bool
+        ) -> List[Tuple[int,bool,datetime, time,int,str,bool]]:
+    # Done が True の場合は done があるもの、False の場合は done がないもの
+    done_filter = task_model.Done.task_id.isnot(None) if Done else task_model.Done.task_id.is_(None)
+
+    # is_task の値に応じてフィルター
+    is_task_filter = task_model.Task.is_task.is_(is_task)
     result: Result = await (
         db.execute(
             select(
@@ -57,8 +66,8 @@ async def get_tasks_nodone_istask(db: AsyncSession) -> List[Tuple[int,bool,datet
                 task_model.Done.task_id.isnot(None).label("done"),
             ).outerjoin(task_model.Done)
             .where(
-                task_model.Done.task_id.is_(None),
-                task_model.Task.is_task.is_(True),
+               done_filter,
+               is_task_filter
             )
         )
     )
