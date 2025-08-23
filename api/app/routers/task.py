@@ -17,7 +17,7 @@ router = APIRouter()
 async def list_tasks(db: AsyncSession = Depends(get_db)):
     return await task_crud.get_tasks_with_done(db)
 
-@router.get("/tasks/nodone&istask",response_model=List[task_schema.Task])
+@router.get("/tasks/istasknodone",response_model=List[task_schema.Task])
 async def list_tasks_nodone_istask(db: AsyncSession = Depends(get_db)):
     return await task_crud.get_tasks_nodone_istask(db)
 
