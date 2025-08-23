@@ -19,6 +19,7 @@ interface Event {
 }
 
 export default function Home() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
   const [allEvents, setAllEvents] = useState<Event[]>([])
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [idToDelete, setIdToDelete] = useState<number | null>(null)
@@ -72,7 +73,7 @@ export default function Home() {
   }
 
   try {
-    const res = await fetch("http://localhost:8000/tasks", {
+    const res = await fetch(`${API_BASE}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...newEvent, is_task: true, user_id: 1 }),
@@ -107,7 +108,7 @@ const handleAddSchedule = async () => {
     return;
   }
   try {
-    const res = await fetch("http://localhost:8000/tasks", {
+    const res = await fetch(`${API_BASE}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...newEvent, is_task: false }),
