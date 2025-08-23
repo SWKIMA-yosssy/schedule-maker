@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta,time
 
 from typing import List,Tuple,Optional
 from sqlalchemy.engine import Result
-
+import calendar
 async def create_task(
     db: AsyncSession, task_create: task_schema.TaskCreate
 ) -> task_model.Task:
@@ -90,6 +90,7 @@ async def get_tasks_by_date(
             task_model.Task.start_time >= start_of_day,
             task_model.Task.start_time < end_of_day
         )
+
     )
 
     return result.scalars().all()
@@ -130,3 +131,52 @@ async def get_tasks_by_month(
 async def delete_task(db:AsyncSession,original:task_model.Task)->None:
     await db.delete(original)
     await db.commit()
+
+#taskのリストを受け取って、required_timeの合計を返す
+def sum_required_time(tasks):
+    total = timedelta()
+    for task in tasks:
+        t = task.required_time
+        if t:  # None でない場合
+            total += timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
+    return total
+
+async def return_sumreq_by_date(
+    db: AsyncSession,
+    target_date: date,
+) -> List[task_schema.Task]:
+    # 日付範囲
+    start_of_day = datetime.combine(target_date, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
+    # フィルター条件
+    is_task_filter = task_model.Task.is_task.is_(False)
+    done_filter = task_model.Done.task_id.is_(None)
+
+    # クエリ実行
+    result = await db.execute(
+        select(task_model.Task)
+        .outerjoin(task_model.Done)
+        .options(selectinload(task_model.Task.done))
+        .where(
+            task_model.Task.start_time >= start_of_day,
+            task_model.Task.start_time < end_of_day,
+            done_filter,
+            is_task_filter
+        )
+    )
+    return timedelta(hours=12)-sum_required_time(result.scalars().all())
+
+async def sum_required_time_per_day_by_month(
+     db:AsyncSession,
+    year:int,
+    month:int,
+    )->List[Tuple[date,timedelta]]:
+    days_in_month = calendar.monthrange(year, month)[1]#整数型でほしいためcalenderを使用
+
+    result_list: List[Tuple[date, timedelta]] = []
+    for day in range(1,days_in_month+1):
+        current_date=date(year,month,day)
+
+        total_required_time=await return_sumreq_by_date(db,current_date)
+        result_list.append((current_date,total_required_time))
+    return result_list

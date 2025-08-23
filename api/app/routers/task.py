@@ -1,5 +1,5 @@
-from typing import List
-from datetime import datetime, date
+from typing import List,Tuple
+from datetime import datetime, date,time, timedelta
 from fastapi import APIRouter, Depends,HTTPException,Query
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,19 @@ async def list_tasks_filterd(
     is_task: bool = Query(True, description="タスクならTrue")
 ):
     return await task_crud.get_tasks_filterd(db, Done=done, is_task=is_task)
+
+@router.get("/tasks/day/sumreq",response_model=timedelta)
+async def sum_required_time_tasks(date:date,db: AsyncSession = Depends(get_db)):
+    return await task_crud.return_sumreq_by_date(db,date)
+
+@router.get("/tasks/month/sumreq",response_model=List[Tuple[date,timedelta]])
+async def sum_required_time_tasks_month(
+        year:int,
+        month:int,
+        db: AsyncSession = Depends(get_db)
+):
+    return await task_crud.sum_required_time_per_day_by_month(db,year,month)
+
 
 @router.post("/tasks", response_model=task_schema.TaskCreateResponse)
 async def create_task(
