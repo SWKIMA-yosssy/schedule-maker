@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
 
@@ -25,6 +25,11 @@ class TaskCreateResponse(TaskCreate):
 
 class Task(TaskBase):
     task_id: Optional[int] = Field(None)
+    done: bool = Field(False, description="完了フラグ")
+
+    @validator("done", pre=True, always=True)
+    def set_done_from_relationship(cls, v, values):
+        return values.get("done") is not None
 
     class Config:
         orm_mode = True

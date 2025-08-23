@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import app.models.task as task_model
 import app.schemas.task as task_schema
-
+from sqlalchemy.orm import selectinload
 from datetime import date, datetime, timedelta
 
 
@@ -21,7 +21,11 @@ async def get_tasks_by_date(
     start_of_day = datetime.combine(target_date, datetime.min.time())
     end_of_day = start_of_day + timedelta(days=1)
     result = await db.execute(
-        select(task_model.Task).where(
+        select(
+            task_model.Task
+        )
+        .options(selectinload(task_model.Task.done))
+        .where(
             task_model.Task.start_time >= start_of_day,
             task_model.Task.start_time < end_of_day
         )
