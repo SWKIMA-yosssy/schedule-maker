@@ -106,6 +106,7 @@ async def run_tetris(
         
         current_time = datetime.now(timezone.utc)
 
+    task_crud.update_deadline_for_schedules(db)    
     try:
         result = await task_crud.tetris(db, current_time)
     except Exception as e:

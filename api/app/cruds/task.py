@@ -197,6 +197,8 @@ async def sum_required_time_per_day_by_month(
         result_list.append((current_date,total_required_time))
     return result_list
 
+
+
 #テトリス用関数は以下に
 
 # 締切が最も近いtetrisされていないTodoのIDを取得
@@ -235,7 +237,7 @@ async def get_nearest_starttime_task(
                is_task_filter,#予定(Todoでない)
                done_filter#完了していない
                )  
-        .order_by(task_model.Task.start_time.asc())        # 締切の早い順
+        .order_by(task_model.Task.start_time.asc())        # starttimeの早い順
         .limit(1)                                        # 先頭1件
     )
     task = result.scalar_one_or_none()
@@ -245,38 +247,41 @@ async def get_nearest_starttime_task(
 async def get_nearest_endtime_task(
     db: AsyncSession, target_date: datetime
 ) -> Optional[int]:
-    # 完了していない予定のみ
+    is_task_filter = task_model.Task.is_task.is_(False)
+    done_filter = task_model.Done.task_id.is_(None)
     result = await db.execute(
         select(task_model.Task)
         .outerjoin(task_model.Done)
         .where(
-            task_model.Task.is_task.is_(False),
-            task_model.Done.task_id.is_(None),
-        )
+               task_model.Task.start_time >= target_date,#今日以降
+               is_task_filter,#予定(Todoでない)
+               done_filter#完了していない
+               )  
+        .order_by(task_model.Task.deadline.asc())        # endtimeの早い順
+        .limit(1)                                        # 先頭1件
+    )
+    task = result.scalar_one_or_none()
+    return task.task_id if task else None
+
+
+#task_is=falseの予定についてdeadlineをstart_timeとrequired_timeから計算し上書きする
+async def update_deadline_for_schedules(db: AsyncSession) -> None:
+    """
+    is_task=False のタスクについて、deadlineを start_time + required_time で上書き
+    """
+    result = await db.execute(
+        select(task_model.Task)
+        .where(task_model.Task.is_task.is_(False))
     )
     tasks = result.scalars().all()
-    if not tasks:
-        return None
 
-    # Python 側で終了時刻を計算
-    def end_time(task):
-        delta = time_to_timedelta(task.required_time)
-        return task.start_time + delta
-
-    # target_date 以降のタスクのみ
-    tasks = [t for t in tasks if end_time(t) >= target_date]
-
-    if not tasks:
-        return None
-
-    # 終了時間が早い順でソート
-    tasks.sort(key=end_time)
-    print(f"[DEBUG] nearest task: {tasks[0].__dict__}")
-    print(f"done relationship: {tasks[0].done}")
-    print(f"tetrisd: {tasks[0].tetrisd}")
-    return task_schema.Task.from_orm(tasks[0])
-
-
+    for task in tasks:
+        if task.start_time and task.required_time:
+            # required_time は time型なので timedelta に変換
+            req_delta = time_to_timedelta(task.required_time)
+            task.deadline = task.start_time + req_delta
+            db.add(task)  # 更新対象としてマーク
+    await db.commit()
 
 #timedeltaをtime型に変換
 def timedelta_to_time(td: timedelta) -> time:
