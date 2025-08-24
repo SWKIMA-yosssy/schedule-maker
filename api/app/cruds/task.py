@@ -304,7 +304,7 @@ async def tetris(
     # 最も締め切りの近いTodoを取得
     todo_id = await get_nearest_deadline_task(db, current_time)
     # 最も開始時点の近い予定を取得
-    schedule_id = await get_nearest_endtime_task(db, current_time)
+    schedule_id = await get_nearest_starttime_task(db, current_time)
 
     # todoが無ければ終了
     if todo_id is None:
