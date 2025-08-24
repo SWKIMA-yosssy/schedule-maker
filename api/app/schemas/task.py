@@ -27,7 +27,7 @@ class TaskCreateResponse(TaskCreate):
 class Task(TaskBase):
     task_id: Optional[int] = Field(None)
     done: bool = Field(False, description="完了フラグ")
-
+    tetrisd: bool = Field(False, description="内部処理用フラグ")  # ←追加
     @validator("done", pre=True, always=True)
     def set_done_from_relationship(cls, v, values):
         return bool(v)

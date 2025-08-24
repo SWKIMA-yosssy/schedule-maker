@@ -103,6 +103,7 @@ async def run_tetris(
 ):
     # current_timeが指定されていなければ現在時刻
     if current_time is None:
+        
         current_time = datetime.now(timezone.utc)
 
     try:

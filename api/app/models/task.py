@@ -15,6 +15,7 @@ class Task(Base):
     deadline=Column(DateTime(timezone=True), nullable=True, default=None)
     user_id = Column(Integer)
     title = Column(String(1024))
+    tetrisd= Column(Boolean, nullable=False, default=False)#tetrisが行われたかを見るときだけ使う
 
     done = relationship("Done", back_populates="task",
                         cascade="delete")
