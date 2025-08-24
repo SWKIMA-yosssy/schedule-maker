@@ -6,7 +6,7 @@ FROM node:24.6.0-alpine
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY web/package.json web/package-lock.json* web/.npmrc* ./
+COPY package.json package-lock.json* .npmrc* ./
 RUN \
   if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
   elif [ -f package-lock.json ]; then npm ci; \

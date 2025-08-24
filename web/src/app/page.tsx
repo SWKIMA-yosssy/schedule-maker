@@ -82,6 +82,12 @@ export default function Home() {
     return res.json();
   }
 
+  async function fetchIstaskNodone(): Promise<Task[]> {
+    const res = await fetch(`${API_BASE}/tasks/filterd?done=false&is_task=true`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+    return res.json();
+  }
+
   // ---- FullCalendar イベントへマッピング ----
   function toEvents(tasks: Task[]) {
     return tasks.map(t => ({
@@ -107,6 +113,43 @@ export default function Home() {
       setAllEvents(toEvents(tasks));
     } catch (e) {
       console.error("月間タスク取得に失敗:", e);
+    }
+  };
+
+  const handleOpenTaskManageModal = async () => {
+    try {
+      const fetchedTasks = await fetchIstaskNodone();
+      const formattedTasks = fetchedTasks.map(task => ({
+        id: task.task_id,
+        title: task.title,
+        date: new Date(task.start_time).toLocaleDateString(),
+        time: new Date(task.start_time).toLocaleTimeString(),
+        hours: task.required_time ? task.required_time / 60 : 0,
+      }));
+      setTasks(formattedTasks);
+      setIsTaskManageModalOpen(true);
+    } catch (e) {
+      console.error("未完了タスクの取得に失敗:", e);
+    }
+  };
+
+  const handleCompleteTask = async (taskId: number) => {
+    try {
+      const res = await fetch(`${API_BASE}/tasks/${taskId}/done`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ done: true }),
+      });
+
+      if (res.ok) {
+        setTasks(tasks.filter(t => t.id !== taskId));
+      } else {
+        console.error("タスクの完了に失敗:", await res.text());
+        alert("タスクの完了処理に失敗しました。");
+      }
+    } catch (err) {
+      console.error("通信エラー:", err);
+      alert("サーバーとの通信に失敗しました。");
     }
   };
 
@@ -191,7 +234,7 @@ export default function Home() {
   return (
     <>
       <nav className="flex justify-between mb-12 border-b border-violet-100 p-4">
-        <h1 className="font-bold text-2xl text-gray-700">俺らのカレンダー</h1>
+        <h1 className="font-bold text-gray-700">俺らのカレンダー</h1>
       </nav>
       <main className="flex min-h-screen flex-col items-center justify-between p-24">
         <div className="w-full">
@@ -246,7 +289,7 @@ export default function Home() {
           <ul className="text-2xl space-y-4">
             <li>
               <button
-                onClick={() => setIsTaskManageModalOpen(true)}
+                onClick={handleOpenTaskManageModal}
                 className="w-full px-4 py-3 rounded-lg bg-violet-600 text-white font-semibold shadow-md hover:bg-violet-700 transition text-lg">
                 タスク管理
               </button>
@@ -345,7 +388,7 @@ export default function Home() {
               <div className="flex justify-end space-x-2">
                 <button
                   onClick={() => setIsAddModalOpen_schedule(false)}
-                  className="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400"
+                  className="px-4 py-2 rounded border-b-4 bg-gray-300 hover:bg-gray-400"
                 >
                   キャンセル
                 </button>
@@ -371,7 +414,7 @@ export default function Home() {
                 value={newEvent.title}
                 onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
               />
-              <input
+              <input className=''
                 type="date"
                 onChange={(e) => {
                   const date = e.target.value;
@@ -454,7 +497,7 @@ export default function Home() {
                         <p className="text-sm text-gray-500">{task.date} {task.time}（{task.hours}時間）</p>
                       </div>
                       <button
-                        onClick={() => setTasks(tasks.filter(t => t.id !== task.id))}
+                        onClick={() => { handleCompleteTask(task.id); setTasks(tasks.filter(t => t.id !== task.id)) }}
                         className="text-red-500 hover:text-red-700"
                       >
                         ✕
