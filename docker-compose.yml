@@ -1,8 +1,7 @@
 services:
   web:
     build:
-      context: .
-      dockerfile: ./web/Dockerfile
+      context: ./web
     ports:
       - 3000:3000
     volumes:
@@ -13,13 +12,12 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: ./api/Dockerfile
-    command: /code/entrypoint.sh
+      context: ./api
+    command: ./entrypoint.sh
     ports:
       - 8000:8000
     volumes:
-      - ./api/app:/code/app
+      - ./app:/app
     environment:
       - DATABASE_URL=postgresql://postgres:password@db:5432/postgres
     depends_on:
